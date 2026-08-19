@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Заметки</string>
+    <string name="add_note">Добавить заметку</string>
+    <string name="empty_notes">Нет заметок.\nНажмите + чтобы создать</string>
+    <string name="title_hint">Заголовок</string>
+    <string name="content_hint">Текст заметки</string>
+</resources>
