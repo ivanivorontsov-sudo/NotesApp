@@ -1,10 +1,12 @@
 package com.example.notesapp
 
 import android.content.Context
+import android.graphics.Paint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -24,16 +26,19 @@ data class Note(
     val id: String,
     var title: String,
     var content: String,
-    val createdAt: Long
+    val createdAt: Long,
+    var isCompleted: Boolean = false
 )
 
 class NotesAdapter(
     private val notes: MutableList<Note>,
     private val onEdit: (Note) -> Unit,
-    private val onDelete: (Note) -> Unit
+    private val onDelete: (Note) -> Unit,
+    private val onToggleComplete: (Note) -> Unit
 ) : RecyclerView.Adapter<NotesAdapter.NoteViewHolder>() {
 
     class NoteViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val checkBox: CheckBox = view.findViewById(R.id.noteCheckBox)
         val title: TextView = view.findViewById(R.id.noteTitle)
         val content: TextView = view.findViewById(R.id.noteContent)
         val date: TextView = view.findViewById(R.id.noteDate)
@@ -47,15 +52,44 @@ class NotesAdapter(
 
     override fun onBindViewHolder(holder: NoteViewHolder, position: Int) {
         val note = notes[position]
+
+        holder.checkBox.setOnCheckedChangeListener(null)
+        holder.checkBox.isChecked = note.isCompleted
+
         holder.title.text = note.title.ifEmpty { "Без названия" }
         holder.content.text = note.content
+
         val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         holder.date.text = sdf.format(Date(note.createdAt))
+
+        applyStrikethrough(holder, note.isCompleted)
+
+        holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
+            if (note.isCompleted != isChecked) {
+                note.isCompleted = isChecked
+                applyStrikethrough(holder, isChecked)
+                onToggleComplete(note)
+            }
+        }
 
         holder.itemView.setOnClickListener { onEdit(note) }
         holder.itemView.setOnLongClickListener {
             onDelete(note)
             true
+        }
+    }
+
+    private fun applyStrikethrough(holder: NoteViewHolder, completed: Boolean) {
+        if (completed) {
+            holder.title.paintFlags = holder.title.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+            holder.content.paintFlags = holder.content.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+            holder.title.alpha = 0.55f
+            holder.content.alpha = 0.55f
+        } else {
+            holder.title.paintFlags = holder.title.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            holder.content.paintFlags = holder.content.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            holder.title.alpha = 1f
+            holder.content.alpha = 1f
         }
     }
 
@@ -78,7 +112,7 @@ class MainActivity : AppCompatActivity() {
         emptyText = findViewById(R.id.emptyText)
         val fab: FloatingActionButton = findViewById(R.id.fab)
 
-        adapter = NotesAdapter(notes, ::showEditDialog, ::confirmDelete)
+        adapter = NotesAdapter(notes, ::showEditDialog, ::confirmDelete, ::onToggleComplete)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
@@ -86,6 +120,10 @@ class MainActivity : AppCompatActivity() {
 
         loadNotes()
         updateEmptyState()
+    }
+
+    private fun onToggleComplete(note: Note) {
+        saveNotes()
     }
 
     private fun showAddDialog() {
@@ -107,7 +145,8 @@ class MainActivity : AppCompatActivity() {
                     id = UUID.randomUUID().toString(),
                     title = title,
                     content = content,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    isCompleted = false
                 )
                 notes.add(0, note)
                 adapter.notifyItemInserted(0)
@@ -168,6 +207,7 @@ class MainActivity : AppCompatActivity() {
             obj.put("title", note.title)
             obj.put("content", note.content)
             obj.put("createdAt", note.createdAt)
+            obj.put("isCompleted", note.isCompleted)
             jsonArray.put(obj)
         }
         prefs.edit().putString("notes", jsonArray.toString()).apply()
@@ -185,7 +225,8 @@ class MainActivity : AppCompatActivity() {
                         id = obj.getString("id"),
                         title = obj.getString("title"),
                         content = obj.getString("content"),
-                        createdAt = obj.getLong("createdAt")
+                        createdAt = obj.getLong("createdAt"),
+                        isCompleted = obj.optBoolean("isCompleted", false)
                     )
                 )
             }
