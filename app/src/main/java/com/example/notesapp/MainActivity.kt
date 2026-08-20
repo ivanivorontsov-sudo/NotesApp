@@ -1,15 +1,14 @@
 package com.example.notesapp
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Paint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
-import android.widget.EditText
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -55,13 +54,11 @@ class NotesAdapter(
 
         holder.checkBox.setOnCheckedChangeListener(null)
         holder.checkBox.isChecked = note.isCompleted
-
         holder.title.text = note.title.ifEmpty { "Без названия" }
         holder.content.text = note.content
 
         val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         holder.date.text = sdf.format(Date(note.createdAt))
-
         applyStrikethrough(holder, note.isCompleted)
 
         holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
@@ -112,75 +109,47 @@ class MainActivity : AppCompatActivity() {
         emptyText = findViewById(R.id.emptyText)
         val fab: FloatingActionButton = findViewById(R.id.fab)
 
-        adapter = NotesAdapter(notes, ::showEditDialog, ::confirmDelete, ::onToggleComplete)
+        adapter = NotesAdapter(notes, ::openEditor, ::confirmDelete, ::onToggleComplete)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
-
-        fab.setOnClickListener { showAddDialog() }
+        fab.setOnClickListener { createAndOpenNote() }
 
         loadNotes()
         updateEmptyState()
     }
 
-    private fun onToggleComplete(note: Note) {
+    override fun onResume() {
+        super.onResume()
+        if (::adapter.isInitialized) {
+            loadNotes()
+            updateEmptyState()
+        }
+    }
+
+    private fun createAndOpenNote() {
+        val note = Note(
+            id = UUID.randomUUID().toString(),
+            title = "",
+            content = "",
+            createdAt = System.currentTimeMillis(),
+            isCompleted = false
+        )
+        notes.add(0, note)
+        adapter.notifyItemInserted(0)
         saveNotes()
+        updateEmptyState()
+        recyclerView.scrollToPosition(0)
+        openEditor(note)
     }
 
-    private fun showAddDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_note, null)
-        val titleEdit = view.findViewById<EditText>(R.id.editTitle)
-        val contentEdit = view.findViewById<EditText>(R.id.editContent)
-
-        AlertDialog.Builder(this)
-            .setTitle("Новая заметка")
-            .setView(view)
-            .setPositiveButton("Сохранить") { _, _ ->
-                val title = titleEdit.text.toString().trim()
-                val content = contentEdit.text.toString().trim()
-                if (title.isEmpty() && content.isEmpty()) {
-                    Toast.makeText(this, "Заметка пуста", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                val note = Note(
-                    id = UUID.randomUUID().toString(),
-                    title = title,
-                    content = content,
-                    createdAt = System.currentTimeMillis(),
-                    isCompleted = false
-                )
-                notes.add(0, note)
-                adapter.notifyItemInserted(0)
-                saveNotes()
-                updateEmptyState()
-                recyclerView.scrollToPosition(0)
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
+    private fun openEditor(note: Note) {
+        startActivity(
+            Intent(this, NoteEditorActivity::class.java)
+                .putExtra(NoteEditorActivity.EXTRA_NOTE_ID, note.id)
+        )
     }
 
-    private fun showEditDialog(note: Note) {
-        val view = layoutInflater.inflate(R.layout.dialog_note, null)
-        val titleEdit = view.findViewById<EditText>(R.id.editTitle)
-        val contentEdit = view.findViewById<EditText>(R.id.editContent)
-        titleEdit.setText(note.title)
-        contentEdit.setText(note.content)
-
-        AlertDialog.Builder(this)
-            .setTitle("Редактировать заметку")
-            .setView(view)
-            .setPositiveButton("Сохранить") { _, _ ->
-                note.title = titleEdit.text.toString().trim()
-                note.content = contentEdit.text.toString().trim()
-                val index = notes.indexOfFirst { it.id == note.id }
-                if (index >= 0) {
-                    adapter.notifyItemChanged(index)
-                    saveNotes()
-                }
-            }
-            .setNegativeButton("Отмена", null)
-            .setNeutralButton("Удалить") { _, _ -> confirmDelete(note) }
-            .show()
-    }
+    private fun onToggleComplete(note: Note) = saveNotes()
 
     private fun confirmDelete(note: Note) {
         AlertDialog.Builder(this)
@@ -220,11 +189,12 @@ class MainActivity : AppCompatActivity() {
             val jsonArray = JSONArray(json)
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
+                val content = obj.optString("content", "")
                 notes.add(
                     Note(
                         id = obj.getString("id"),
-                        title = obj.getString("title"),
-                        content = obj.getString("content"),
+                        title = makeTitle(content),
+                        content = content,
                         createdAt = obj.getLong("createdAt"),
                         isCompleted = obj.optBoolean("isCompleted", false)
                     )
@@ -233,7 +203,16 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        saveNotes()
         adapter.notifyDataSetChanged()
+    }
+
+    private fun makeTitle(content: String): String {
+        return content.trim()
+            .split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+            .take(3)
+            .joinToString(" ")
     }
 
     private fun updateEmptyState() {
