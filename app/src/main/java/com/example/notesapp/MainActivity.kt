@@ -1,15 +1,14 @@
 package com.example.notesapp
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Paint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
-import android.widget.EditText
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -112,74 +111,49 @@ class MainActivity : AppCompatActivity() {
         emptyText = findViewById(R.id.emptyText)
         val fab: FloatingActionButton = findViewById(R.id.fab)
 
-        adapter = NotesAdapter(notes, ::showEditDialog, ::confirmDelete, ::onToggleComplete)
+        adapter = NotesAdapter(notes, ::openEditor, ::confirmDelete, ::onToggleComplete)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
-        fab.setOnClickListener { showAddDialog() }
+        fab.setOnClickListener { createAndOpenNote() }
 
         loadNotes()
         updateEmptyState()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::adapter.isInitialized) {
+            loadNotes()
+            updateEmptyState()
+        }
+    }
+
+    private fun createAndOpenNote() {
+        val note = Note(
+            id = UUID.randomUUID().toString(),
+            title = "",
+            content = "",
+            createdAt = System.currentTimeMillis(),
+            isCompleted = false
+        )
+        notes.add(0, note)
+        adapter.notifyItemInserted(0)
+        saveNotes()
+        updateEmptyState()
+        recyclerView.scrollToPosition(0)
+        openEditor(note)
+    }
+
+    private fun openEditor(note: Note) {
+        startActivity(
+            Intent(this, NoteEditorActivity::class.java)
+                .putExtra(NoteEditorActivity.EXTRA_NOTE_ID, note.id)
+        )
+    }
+
     private fun onToggleComplete(note: Note) {
         saveNotes()
-    }
-
-    private fun showAddDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_note, null)
-        val titleEdit = view.findViewById<EditText>(R.id.editTitle)
-        val contentEdit = view.findViewById<EditText>(R.id.editContent)
-
-        AlertDialog.Builder(this)
-            .setTitle("Новая заметка")
-            .setView(view)
-            .setPositiveButton("Сохранить") { _, _ ->
-                val title = titleEdit.text.toString().trim()
-                val content = contentEdit.text.toString().trim()
-                if (title.isEmpty() && content.isEmpty()) {
-                    Toast.makeText(this, "Заметка пуста", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                val note = Note(
-                    id = UUID.randomUUID().toString(),
-                    title = title,
-                    content = content,
-                    createdAt = System.currentTimeMillis(),
-                    isCompleted = false
-                )
-                notes.add(0, note)
-                adapter.notifyItemInserted(0)
-                saveNotes()
-                updateEmptyState()
-                recyclerView.scrollToPosition(0)
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    private fun showEditDialog(note: Note) {
-        val view = layoutInflater.inflate(R.layout.dialog_note, null)
-        val titleEdit = view.findViewById<EditText>(R.id.editTitle)
-        val contentEdit = view.findViewById<EditText>(R.id.editContent)
-        titleEdit.setText(note.title)
-        contentEdit.setText(note.content)
-
-        AlertDialog.Builder(this)
-            .setTitle("Редактировать заметку")
-            .setView(view)
-            .setPositiveButton("Сохранить") { _, _ ->
-                note.title = titleEdit.text.toString().trim()
-                note.content = contentEdit.text.toString().trim()
-                val index = notes.indexOfFirst { it.id == note.id }
-                if (index >= 0) {
-                    adapter.notifyItemChanged(index)
-                    saveNotes()
-                }
-            }
-            .setNegativeButton("Отмена", null)
-            .setNeutralButton("Удалить") { _, _ -> confirmDelete(note) }
-            .show()
     }
 
     private fun confirmDelete(note: Note) {
@@ -223,8 +197,8 @@ class MainActivity : AppCompatActivity() {
                 notes.add(
                     Note(
                         id = obj.getString("id"),
-                        title = obj.getString("title"),
-                        content = obj.getString("content"),
+                        title = obj.optString("title", ""),
+                        content = obj.optString("content", ""),
                         createdAt = obj.getLong("createdAt"),
                         isCompleted = obj.optBoolean("isCompleted", false)
                     )
