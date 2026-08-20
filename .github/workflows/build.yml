@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/autosave-note-editor ]
   workflow_dispatch:
 
 jobs:
