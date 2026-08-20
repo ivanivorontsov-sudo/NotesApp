@@ -54,13 +54,11 @@ class NotesAdapter(
 
         holder.checkBox.setOnCheckedChangeListener(null)
         holder.checkBox.isChecked = note.isCompleted
-
         holder.title.text = note.title.ifEmpty { "Без названия" }
         holder.content.text = note.content
 
         val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         holder.date.text = sdf.format(Date(note.createdAt))
-
         applyStrikethrough(holder, note.isCompleted)
 
         holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
@@ -114,7 +112,6 @@ class MainActivity : AppCompatActivity() {
         adapter = NotesAdapter(notes, ::openEditor, ::confirmDelete, ::onToggleComplete)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
-
         fab.setOnClickListener { createAndOpenNote() }
 
         loadNotes()
@@ -152,9 +149,7 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun onToggleComplete(note: Note) {
-        saveNotes()
-    }
+    private fun onToggleComplete(note: Note) = saveNotes()
 
     private fun confirmDelete(note: Note) {
         AlertDialog.Builder(this)
@@ -194,11 +189,12 @@ class MainActivity : AppCompatActivity() {
             val jsonArray = JSONArray(json)
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
+                val content = obj.optString("content", "")
                 notes.add(
                     Note(
                         id = obj.getString("id"),
-                        title = obj.optString("title", ""),
-                        content = obj.optString("content", ""),
+                        title = makeTitle(content),
+                        content = content,
                         createdAt = obj.getLong("createdAt"),
                         isCompleted = obj.optBoolean("isCompleted", false)
                     )
@@ -207,7 +203,16 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        saveNotes()
         adapter.notifyDataSetChanged()
+    }
+
+    private fun makeTitle(content: String): String {
+        return content.trim()
+            .split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+            .take(3)
+            .joinToString(" ")
     }
 
     private fun updateEmptyState() {
